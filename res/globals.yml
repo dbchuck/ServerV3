@@ -373,7 +373,7 @@ keystone_admin_project: "admin"
 # Glance - Image Options
 ########################
 # Configure image backend.
-#glance_backend_ceph: "no"
+glance_backend_ceph: "yes"
 #glance_backend_file: "yes"
 #glance_backend_swift: "no"
 #glance_backend_vmware: "no"
@@ -405,7 +405,7 @@ glance_enable_rolling_upgrade: "no"
 # Gnocchi options
 #################
 # Valid options are [ file, ceph ]
-#gnocchi_backend_storage: "{{ 'ceph' if enable_ceph|bool else 'file' }}"
+#gnocchi_backend_storage: "ceph"
 
 # Valid options are [redis, '']
 #gnocchi_incoming_storage: "{{ 'redis' if enable_redis | bool else '' }}"
@@ -414,7 +414,7 @@ glance_enable_rolling_upgrade: "no"
 # Cinder - Block Storage Options
 ################################
 # Enable / disable Cinder backends
-#cinder_backend_ceph: "{{ enable_ceph }}"
+cinder_backend_ceph: "ceph"
 #cinder_backend_vmwarevc_vmdk: "no"
 #cinder_volume_group: "cinder-volumes"
 
@@ -434,7 +434,7 @@ glance_enable_rolling_upgrade: "no"
 ########################
 # Nova - Compute Options
 ########################
-#nova_backend_ceph: "{{ enable_ceph }}"
+nova_backend_ceph: "ceph"
 
 # Valid options are [ qemu, kvm, vmware, xenapi ]
 nova_compute_virt_type: "kvm"
