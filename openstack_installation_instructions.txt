@@ -1,0 +1,212 @@
+Setup host machine
+Configure virsh with custom values
+Setup in-line Security Onion box to monitor internet network traffic from openstack cluster
+Setup Security Onion dhcp w/ router advertisement
+Vagrant setup virtual environment/hosts that we will deploy OpenStack to (multinode OpenStack deployment)
+Set static IPs to machines
+Transfer Vagrant keys to virtual deployment host
+Setup virtual deployment host (kolla-ansible,pip packages, etc.)
+Configure Ansible for more performance
+Edit multinode/transfer to virtual deployment host
+
+
+
+sudo yum install epel-release -y
+sudo yum install ruby-devel libvirt-devel zlib-devel libpng-devel gcc qemu-kvm qemu-img libvirt libvirt-python libvirt-client virt-install bridge-utils git -y
+sudo yum install https://releases.hashicorp.com/vagrant/2.2.5/vagrant_2.2.5_x86_64.rpm -y
+vagrant plugin install vagrant-hostmanager
+vagrant plugin install --plugin-version ">= 0.0.31" vagrant-libvirt
+
+sudo gpasswd -a ${USER} libvirt
+newgrp libvirt
+sudo systemctl disable firewalld
+sudo systemctl start nfs-server
+sudo systemctl start rpcbind.service
+sudo systemctl enable libvirtd --now
+
+# configure libvirtd default storage location
+sudo virsh pool-destroy default
+sudo virsh pool-undefine default
+sudo virsh pool-define-as --name default --type dir --target /openstack
+sudo virsh pool-autostart default
+sudo virsh pool-start default
+
+cat << EOF > /etc/sysconfig/network-scripts/ifcfg-internal0
+DEVICE="internal0"
+BOOTPROTO="static"
+ONBOOT="yes"
+TYPE="Bridge"
+NM_CONTROLLED="no"
+IPV6INIT="no"
+IPV6_AUTOCONF="no"
+EOF
+
+
+
+###
+# Create bridge on team0 interface named: external0
+###
+
+
+
+cat << EOF > /tmp/temp.xml
+<network>
+<name>external</name>
+<bridge name="external0"/>
+<forward mode="bridge"/>
+</network>
+EOF
+cat << EOF > /tmp/temp2.xml
+<network>
+<name>default</name>
+<bridge name='internal0'/>
+<forward mode="bridge"/>
+</network>
+EOF
+
+
+sudo virsh net-define /tmp/temp.xml
+sudo virsh net-start external
+sudo virsh net-autostart external
+
+sudo virsh net-undefine default
+sudo virsh net-destroy default
+sudo virsh net-define /tmp/temp2.xml
+sudo virsh net-start default
+sudo virsh net-autostart default
+
+virt-install --name security_onion --cdrom /opt/securityOnion/securityonion-16.04.6.1.iso --graphics spice --graphics vnc --vcpus 4 --ram 8192 --os-type linux --os-variant ubuntu16.04 --disk size=50,format=raw,sparse=true --network network=default --network network=external
+
+ssh onions@192.168.138.200
+# Switch /etc/network/interfaces OPENSTACK_IFACE from manual to static
+# And assign address, gateway, netmask
+
+export INTERNET_IFACE='ens4'
+export OPENSTACK_IFACE='ens3'
+export OPENSTACK_EXT_ROUTER='10.4.4.1'
+export OPENSTACK_EXT_DHCP_POOL='10.4.4.20,10.4.4.253'
+
+### Write dnsmasq DHCP file for openstack network
+cat << EOF > /opt/openstack-network.conf
+strict-order
+expand-hosts
+pid-file=/opt/openstack-network.pid
+except-interface=lo
+bind-dynamic
+interface=$OPENSTACK_IFACE
+dhcp-option=option:router,$OPENSTACK_EXT_ROUTER
+dhcp-range=$OPENSTACK_EXT_DHCP_POOL
+dhcp-no-override
+dhcp-authoritative
+dhcp-lease-max=127
+dhcp-hostsfile=/opt/openstack-network.hostsfile
+addn-hosts=/opt/openstack-network.addnhosts
+EOF
+
+# TODO create systemd file for dnsmasq for persistance
+# Get dnsmasq command for dhcp w/ router advertising on openstack "public/external" network
+/usr/sbin/dnsmasq --conf-file=/opt/openstack-network.conf
+
+sysctl -w net.ipv4.ip_forward=1
+# https://unix.stackexchange.com/a/222065/341646
+iptables -t nat -A POSTROUTING -o $INTERNET_IFACE -j MASQUERADE
+iptables -A FORWARD -i $OPENSTACK_IFACE -o $INTERNET_IFACE -j ACCEPT
+iptables -A FORWARD -i $INTERNET_IFACE -o $OPENSTACK_IFACE -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+exit # securityOnion vm
+
+# Vagrant setup virtual machines
+vagrant up
+
+vagrant destroy -f; for _ in 1 2; do for i in operator compute0 compute1 control0 control1 control2; do vagrant up --provision $i; done; done
+
+vagrant ssh operator
+# Grab your customized inventory file and globals.yml
+scp server@192.168.138.200:/home/server/res/* ~/
+sudo su
+# export REGISTRY_PORT=4000
+# export REGISTRY_URL="operator"
+# export REGISTRY=${REGISTRY_URL}:${REGISTRY_PORT}
+# systemctl disable --now firewalld
+# yum install -y yum-utils device-mapper-persistent-data lvm2 -y
+# yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+# yum install docker-ce docker-ce-cli containerd.io -y
+yum install python-devel libffi-devel gcc openssl-devel libselinux-python -y
+yum install git sshpass python-virtualenv -y
+# systemctl enable --now docker
+setenforce permissive
+
+# docker run -d --name registry --restart=always -p ${REGISTRY_PORT}:5000 -e STANDALONE=True -e MIRROR_SOURCE=https://registry-1.docker.io -e MIRROR_SOURCE_INDEX=https://index.docker.io -e STORAGE_PATH=/var/lib/registry -v /data/host/registry-storage:/var/lib/registry registry:2
+# docker exec -it registry /bin/sh
+# cat << EOF >> /etc/docker/registry/config.yml
+# proxy:
+#   remoteurl: https://registry-1.docker.io
+# EOF
+# exit
+exit
+
+mkdir ~/openstack-virt-env
+virtualenv ~/openstack-virt-env
+source ~/openstack-virt-env/bin/activate
+pip install -U pip
+pip install ansible
+pip install kolla-ansible
+sudo mkdir -p /etc/kolla
+sudo chown $USER:$USER /etc/kolla
+cp -r ~/openstack-virt-env/share/kolla-ansible/etc_examples/kolla/* /etc/kolla
+# Sample inventory files
+#cp ~/openstack-virt-env/share/kolla-ansible/ansible/inventory/* .
+# Make sure Ansible uses scp.
+cat > ~vagrant/.ansible.cfg <<EOF
+[defaults]
+forks=100
+remote_user = root
+
+[ssh_connection]
+scp_if_ssh=True
+EOF
+chown vagrant: ~vagrant/.ansible.cfg
+# git clone https://opendev.org/openstack/kolla
+# pip install --upgrade docker
+# sudo usermod -aG docker vagrant
+
+mv ~/globals.yml /etc/kolla/
+
+# cd kolla
+# tools/start-registry
+
+# Then use this to verify if ansible can reach all hosts and verify syntax
+ansible -i multinode all -m ping
+kolla-genpwd
+
+# Edit /etc/kolla/globals.yml
+#
+#     kolla_base_distro: "centos"
+#     kolla_install_type: "source"
+#     openstack_release: "stein"
+#     network_interface: "eth0"
+#     neutron_external_interface: "eth1"
+#     docker_registry: 192.168.1.100:5000
+#
+#
+# # for each machine ...
+# #   export REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io
+# #   add this to /etc/docker/daemon.json
+# #       {
+# #         "insecure-registries" : ["192.168.1.100:5000"]
+# #       }
+# #   systemctl restart docker
+# # done
+#
+# kolla-ansible -i ./multinode bootstrap-servers
+# kolla-ansible -i ./multinode prechecks
+# kolla-ansible -i ./multinode pull
+# kolla-ansible -i ./multinode deploy
+
+kolla-ansible -i ./multinode bootstrap-servers && kolla-ansible -i ./multinode prechecks && kolla-ansible -i ./multinode pull && kolla-ansible -i ./multinode deploy
+
+pip install python-openstackclient
+kolla-ansible post-deploy
+. /etc/kolla/admin-openrc.sh
+
+bash init-runonce
