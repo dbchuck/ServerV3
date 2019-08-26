@@ -4,15 +4,15 @@ This is an inefficient setup of OpenStack, but it allows a person to emulate a p
 
 ## Requirements:
 
-48GB+ of RAM
-40GB+ of storage space
+- 48GB+ of RAM
+- 40GB+ of storage space
 
 ## Recommendations:
 
-Highly recommended to use SSDs to host OpenStack VMs.
-Have over 64GB of RAM to partition a few machines in OpenStack
-8+ physical cores
-100Mb/s Internet connection
+- Highly recommended to use SSDs to host OpenStack VMs.
+- Have over 64GB of RAM to partition a few machines in OpenStack
+- 8+ physical cores
+- 100Mb/s Internet connection
 
 
 ### Step 1
