@@ -47,12 +47,8 @@ Vagrant.configure(2) do |config|
   username = "vagrant"
   user_home = "/home/#{username}"
   config.vm.network :private_network, type: "dhcp"
-  config.vm.network :public_network, :libvirt__network_name => 'nonInternet',
-    :dev => "internal0",
-    :mode => "bridge",
-    :type => "bridge"
   config.vm.network :public_network, :libvirt__network_name => 'internet',
-    :dev => "external0",
+    :dev => "internal0",
     :mode => "bridge",
     :type => "bridge"
   config.vm.provision :hostmanager
@@ -76,6 +72,10 @@ Vagrant.configure(2) do |config|
     echo StrictHostKeyChecking no >> #{user_home}/.ssh/config
     chown -R #{username} #{user_home}/.ssh
     echo "* * * * * root echo 3 > /proc/sys/vm/drop_caches" > /etc/crontab
+    nmcli con mod 'System eth0' ipv4.never-default yes
+    nmcli con mod 'System eth1' ipv4.never-default yes
+    nmcli con down 'System eth0'; nmcli con up 'System eth0'
+    nmcli con down 'System eth1'; nmcli con up 'System eth1'
   EOS
 
   # The operator controls the deployment
@@ -100,16 +100,21 @@ Vagrant.configure(2) do |config|
       node.hostmanager.aliases = hostname
       # node.vm.provision :shell, path: PROVISION_SCRIPT, args: ""
       node.vm.synced_folder ".", "/vagrant", disabled: true
+      # Add additional ethernet port
+      node.vm.network :public_network, :libvirt__network_name => 'internet',
+        :dev => "internal0",
+        :mode => "bridge",
+        :type => "bridge"
       node.vm.provider PROVIDER do |vm|
-        vm.memory = 10240
+        vm.memory = 8192
         vm.cpus = 4
         vm.nested = true
         vm.graphics_ip = GRAPHICSIP
         vm.storage :file, :size => '10T', :path => "storage#{i}.img", :type => 'raw'
       end
       node.vm.provision :shell, inline: <<-EOS
-        sudo ip a flush eth2
-        sudo rm /etc/sysconfig/network-scripts/ifcfg-eth2 || echo 'Already removed eth2 cfg.'
+        sudo nmcli con mod 'System eth2' ipv4.method disabled
+        sudo nmcli con down 'System eth2'; sudo nmcli con up 'System eth2'
       EOS
     end
   end
