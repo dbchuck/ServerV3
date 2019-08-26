@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+curl -L https://copr.fedorainfracloud.org/coprs/rbu/dracut-crypt-ssh/repo/epel-7/rbu-dracut-crypt-ssh-epel-7.repo -o /etc/yum.repos.d/rbu-dracut-crypt-ssh-epel-7.repo || exit 1
+yum install dracut-crypt-ssh -y || exit 1

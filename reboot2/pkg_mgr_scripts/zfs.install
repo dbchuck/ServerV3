@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+yum install http://download.zfsonlinux.org/epel/zfs-release.el7_6.noarch.rpm -y || exit 1
+gpg --quiet --with-fingerprint /etc/pki/rpm-gpg/RPM-GPG-KEY-zfsonlinux || exit 1
+yum --enablerepo=zfs-testing install kernel-devel zfs -y || exit 1
+yum install mailx -y || exit 1

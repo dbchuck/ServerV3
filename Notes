@@ -1,0 +1,50 @@
+# Security Onion
+https://github.com/hunt3vil/vagrant-security-onion/blob/master/Vagrantfile
+https://github.com/hunt3vil/vagrant-security-onion
+https://buildmedia.readthedocs.org/media/pdf/securityonion/latest/securityonion.pdf
+
+# Deploy Docker Registry
+https://docs.openstack.org/project-deploy-guide/kolla-ansible/stein/multinode.html
+
+# Libvirt networking
+https://wiki.libvirt.org/page/VirtualNetworking
+https://wiki.libvirt.org/page/Networking
+
+# Virt-install
+https://linux.die.net/man/1/virt-install
+
+# Kolla-Ansible SSL
+https://docs.openstack.org/kolla-ansible/latest/admin/advanced-configuration.html
+
+# Optimizations
+https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/virtualization_tuning_and_optimization_guide/sect-virtualization_tuning_optimization_guide-numa-numa_and_libvirt
+http://www.admin-magazine.com/Archive/2014/20/Best-practices-for-KVM-on-NUMA-servers
+
+# Enable client ip:port forwarding
+sysctl net.ipv4.ip_forward=1
+iptables -t nat -A PREROUTING -p tcp --dport 1111 -j DNAT --to-destination 2.2.2.2:1111
+iptables -t nat -A POSTROUTING -j MASQUERADE
+
+# FreeRADIUS
+https://freeradius.org/
+
+# Disk Encryption
+https://wiki.archlinux.org/index.php/Dm-crypt/Specialties#Encrypted_system_using_a_detached_LUKS_header
+https://wiki.archlinux.org/index.php/Dm-crypt/Encrypting_an_entire_system#Plain_dm-crypt
+
+# SSH Auditing
+https://github.com/arthepsy/ssh-audit
+
+# Kernel Keyctl
+https://www.ibm.com/developerworks/library/l-key-retention/
+
+# PCIe Passthrough
+https://wiki.archlinux.org/index.php/PCI_passthrough_via_OVMF
+
+# CentOS 7 security
+https://highon.coffee/blog/security-harden-centos-7/
+https://www.startpage.com/do/dsearch?query=centos%207%20harden&cat=web&pl=opensearch
+
+# Fail2ban
+https://serverfault.com/questions/646167/why-is-fail2ban-not-banning-this-attack
+https://www.a2hosting.com/kb/security/hardening-a-server-with-fail2ban

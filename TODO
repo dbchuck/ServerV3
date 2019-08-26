@@ -1,0 +1,27 @@
+# TODO test out single user auth
+## TODO fail2ban/pam_shield
+## TODO add anti-keylogger
+## TODO setup unpriviledged user
+## TODO run security tools/auditors (SSH, rootkits, etc)
+
+pam_oath SSH
+## TODO: Add ChrootDirectory option
+# https://www.howtoforge.com/chrooted-ssh-sftp-tutorial-debian-lenny
+
+PORT knocker
+## TODO setup one_time_squence
+## TODO test if knockd can listen on multiple interfaces
+## TODO test what TCP flags will work
+
+Temp_limit
+## TODO get rid of rust
+
+ZFS
+
+## TODO: need to enable ZFS feature encryption
+
+
+Email PAM sys login
+
+## TODO: Find a more secure way to issue emails
+TODO: Reduce the number of emails (maybe)

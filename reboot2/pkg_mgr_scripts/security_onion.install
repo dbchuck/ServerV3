@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+yum install qemu-kvm libvirt virt-install -y || exit 1

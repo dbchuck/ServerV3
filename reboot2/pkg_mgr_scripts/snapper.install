@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+yum install snapper.x86_64 -y || exit 1

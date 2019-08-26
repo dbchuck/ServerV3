@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+yum install mailx -y || exit 1
