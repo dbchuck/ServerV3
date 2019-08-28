@@ -1,0 +1,11 @@
+[mons]
+control[0:2] ansible_user=vagrant ansible_ssh_private_key_file=/home/vagrant/.ssh/openstack ansible_become=true
+
+[osds]
+control[0:2] ansible_user=vagrant ansible_ssh_private_key_file=/home/vagrant/.ssh/openstack ansible_become=true
+
+[mgrs]
+control[0:2] ansible_user=vagrant ansible_ssh_private_key_file=/home/vagrant/.ssh/openstack ansible_become=true
+
+[grafana-server]
+control[0:2] ansible_user=vagrant ansible_ssh_private_key_file=/home/vagrant/.ssh/openstack ansible_become=true

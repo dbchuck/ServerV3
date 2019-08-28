@@ -1,0 +1,32 @@
+vagrant destroy -f; for _ in 1 2; do for i in operator compute0 compute1 control0 control1 control2; do vagrant up --provision $i; done; done
+vagrant ssh operator
+
+cd ~
+sudo yum install python-devel libffi-devel gcc openssl-devel libselinux-python -y
+sudo yum install git sshpass python-virtualenv libvirt -y
+mkdir ~/openstack-virt-env
+virtualenv ~/openstack-virt-env
+source ~/openstack-virt-env/bin/activate
+pip install -U pip
+pip install ansible
+git clone https://github.com/ceph/ceph-ansible.git
+cd ceph-ansible
+git checkout stable-4.0
+pip install -r requirements.txt
+
+rm -rvf ~/custom-ceph; scp -r server@192.168.138.200:/home/server/res/ceph-ansible ~/custom-ceph && mv ~/custom-ceph/all.yml ~/ceph-ansible/group_vars/
+
+
+mv ~/custom-ceph/ceph-hosts ~/ceph-ansible/
+mv ~/custom-ceph/all.yml ~/ceph-ansible/group_vars/
+mv ~/ceph-ansible/site-docker.yml{.sample,}
+# for i in 0 1 2; do ssh -i ~/.ssh/openstack control$i "sudo yum install libvirt -y; "; done
+
+# docker exec ceph-mon-control0 ceph --cluster ceph -n mon. -k /var/lib/ceph/mon/ceph-control0/keyring mon_status --format json
+
+# DEV='/dev/vdb'
+# pvcreate $DEV
+# for i in data-vg1 db-vg1 wal-vg1; do vgcreate $i $DEV; done
+
+ansible -i ceph-hosts all -m ping
+ansible-playbook -i ceph-hosts site-docker.yml
