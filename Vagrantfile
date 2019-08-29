@@ -110,7 +110,7 @@ Vagrant.configure(2) do |config|
         vm.cpus = 4
         vm.nested = true
         vm.graphics_ip = GRAPHICSIP
-        vm.storage :file, :size => '10T', :path => "storage#{i}.img", :type => 'raw'
+        # vm.storage :file, :size => '5TB', :path => "storage#{i}.img", :type => 'raw'
       end
       node.vm.provision :shell, inline: <<-EOS
         sudo nmcli con mod 'System eth2' ipv4.method disabled

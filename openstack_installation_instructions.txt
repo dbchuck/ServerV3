@@ -31,6 +31,12 @@ sudo virsh pool-define-as --name default --type dir --target /openstack
 sudo virsh pool-autostart default
 sudo virsh pool-start default
 
+sudo virsh pool-destroy storage
+sudo virsh pool-undefine storage
+sudo virsh pool-define-as --name storage --type dir --target /storage
+sudo virsh pool-autostart storage
+sudo virsh pool-start storage
+
 cat << EOF > /etc/sysconfig/network-scripts/ifcfg-internal0
 DEVICE="internal0"
 BOOTPROTO="static"
