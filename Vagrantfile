@@ -19,8 +19,6 @@ DISTRO = "centos"
 # is libvirt.
 GRAPHICSIP = "127.0.0.1"
 
-PROVISION_SCRIPT = "bootstrap.sh"
-
 # Configure a new SSH key and config so the operator is able to connect with
 # the other cluster nodes.
 unless File.file?(File.join(vagrant_dir, 'vagrantkey'))
@@ -90,6 +88,15 @@ Vagrant.configure(2) do |config|
       vm.nested = true
       vm.graphics_ip = GRAPHICSIP
     end
+    admin.vm.provision :shell, inline: <<-EOS
+      yum install python-devel libffi-devel gcc openssl-devel libselinux-python -y
+      yum install git sshpass python-virtualenv libvirt -y
+      su - vagrant bash -c 'echo -e "Host *\nIdentityFile ~/.ssh/openstack" > ~/.ssh/config'
+      su - vagrant bash -c "mkdir ~/openstack-virt-env && virtualenv ~/openstack-virt-env"
+      su - vagrant bash -c "source ~/openstack-virt-env/bin/activate && pip install -U pip"
+      su - vagrant bash -c "source ~/openstack-virt-env/bin/activate && pip install ansible"
+      su - vagrant bash -c "source ~/openstack-virt-env/bin/activate && pip install kolla-ansible"
+    EOS
   end
 
   # The control nodes (that will host storage and networking OpenStack components as well)
@@ -113,8 +120,11 @@ Vagrant.configure(2) do |config|
         # vm.storage :file, :size => '5TB', :path => "storage#{i}.img", :type => 'raw'
       end
       node.vm.provision :shell, inline: <<-EOS
-        sudo nmcli con mod 'System eth2' ipv4.method disabled
-        sudo nmcli con down 'System eth2'; sudo nmcli con up 'System eth2'
+        nmcli con mod 'System eth2' ipv4.method disabled
+        nmcli con down 'System eth2'; sudo nmcli con up 'System eth2'
+        yum install -y yum-utils device-mapper-persistent-data lvm2
+        yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+        yum install docker-ce docker-ce-cli containerd.io -y
       EOS
     end
   end
