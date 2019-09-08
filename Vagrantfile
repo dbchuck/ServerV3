@@ -28,6 +28,7 @@ end
 Vagrant.configure(2) do |config|
   config.vm.provider :libvirt do |libvirt|
     libvirt.driver = "kvm"
+    libvirt.storage_pool_name = 'storage2'
   end
   config.hostmanager.enabled = false
   config.hostmanager.ip_resolver = proc do |machine|
@@ -74,11 +75,12 @@ Vagrant.configure(2) do |config|
     nmcli con mod 'System eth1' ipv4.never-default yes
     nmcli con down 'System eth0'; nmcli con up 'System eth0'
     nmcli con down 'System eth1'; nmcli con up 'System eth1'
+    echo "ip_resolve=4" >> /etc/yum.conf
   EOS
 
   # The operator controls the deployment
   config.vm.define "operator", primary: true do |admin|
-    admin.vm.hostname = "operator.local"
+    admin.vm.hostname = "operator"
     admin.hostmanager.aliases = "operator"
     # admin.vm.provision :shell, path: PROVISION_SCRIPT, args: ""
     admin.vm.synced_folder ".", "/vagrant", disabled: true
@@ -91,19 +93,20 @@ Vagrant.configure(2) do |config|
     admin.vm.provision :shell, inline: <<-EOS
       yum install python-devel libffi-devel gcc openssl-devel libselinux-python -y
       yum install git sshpass python-virtualenv libvirt -y
-      su - vagrant bash -c 'echo -e "Host *\nIdentityFile ~/.ssh/openstack" > ~/.ssh/config'
+      su - vagrant bash -c 'echo -e "Host *\n\tIdentityFile ~/.ssh/openstack" >> ~/.ssh/config'
       su - vagrant bash -c "mkdir ~/openstack-virt-env && virtualenv ~/openstack-virt-env"
       su - vagrant bash -c "source ~/openstack-virt-env/bin/activate && pip install -U pip"
       su - vagrant bash -c "source ~/openstack-virt-env/bin/activate && pip install ansible"
       su - vagrant bash -c "source ~/openstack-virt-env/bin/activate && pip install kolla-ansible"
+      echo "source ~/openstack-virt-env/bin/activate" >> ~vagrant/.bash_profile
     EOS
   end
 
   # The control nodes (that will host storage and networking OpenStack components as well)
-  (0..2).each do |i|
+  (0..1).each do |i|
     hostname = "control#{i}"
     config.vm.define hostname do |node|
-      node.vm.hostname = "#{hostname}.local"
+      node.vm.hostname = "#{hostname}"
       node.hostmanager.aliases = hostname
       # node.vm.provision :shell, path: PROVISION_SCRIPT, args: ""
       node.vm.synced_folder ".", "/vagrant", disabled: true
@@ -113,6 +116,7 @@ Vagrant.configure(2) do |config|
         :mode => "bridge",
         :type => "bridge"
       node.vm.provider PROVIDER do |vm|
+        # vm.storage_pool_name = 'storage2'
         vm.memory = 8192
         vm.cpus = 4
         vm.nested = true
@@ -129,10 +133,36 @@ Vagrant.configure(2) do |config|
     end
   end
 
+  (0..2).each do |i|
+    hostname = "storage#{i}"
+    config.vm.define hostname do |node|
+      node.vm.hostname = "#{hostname}"
+      node.hostmanager.aliases = hostname
+      # node.vm.provision :shell, path: PROVISION_SCRIPT, args: ""
+      node.vm.synced_folder ".", "/vagrant", disabled: true
+      # Add additional ethernet port
+      node.vm.network :public_network, :libvirt__network_name => 'internet',
+        :dev => "internal0",
+        :mode => "bridge",
+        :type => "bridge"
+      node.vm.provider PROVIDER do |vm|
+        vm.memory = 2048
+        vm.cpus = 2
+        vm.nested = true
+        vm.graphics_ip = GRAPHICSIP
+        # vm.storage :file, :size => '5TB', :path => "storage#{i}.img", :type => 'raw'
+      end
+      node.vm.provision :shell, inline: <<-EOS
+        nmcli con mod 'System eth2' ipv4.method disabled
+        nmcli con down 'System eth2'; sudo nmcli con up 'System eth2'
+      EOS
+    end
+  end
+
   (0..1).each do |i|
     hostname = "compute#{i}"
     config.vm.define hostname do |node|
-      node.vm.hostname = "#{hostname}.local"
+      node.vm.hostname = "#{hostname}"
       node.hostmanager.aliases = hostname
       # node.vm.provision :shell, path: PROVISION_SCRIPT, args: ""
       node.vm.synced_folder ".", "/vagrant", disabled: true

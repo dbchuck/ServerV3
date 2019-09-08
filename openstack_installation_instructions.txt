@@ -37,6 +37,7 @@ sudo virsh pool-define-as --name storage --type dir --target /storage
 sudo virsh pool-autostart storage
 sudo virsh pool-start storage
 
+
 cat << EOF > /etc/sysconfig/network-scripts/ifcfg-internal0
 DEVICE="internal0"
 BOOTPROTO="static"
@@ -129,39 +130,10 @@ vagrant destroy -f; for _ in 1 2; do for i in operator compute0 compute1 control
 vagrant ssh operator
 # Grab your customized inventory file and globals.yml
 scp server@192.168.138.200:/home/server/res/* ~/
-sudo su
-# export REGISTRY_PORT=4000
-# export REGISTRY_URL="operator"
-# export REGISTRY=${REGISTRY_URL}:${REGISTRY_PORT}
-# systemctl disable --now firewalld
-# yum install -y yum-utils device-mapper-persistent-data lvm2 -y
-# yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-# yum install docker-ce docker-ce-cli containerd.io -y
-yum install python-devel libffi-devel gcc openssl-devel libselinux-python -y
-yum install git sshpass python-virtualenv -y
-# systemctl enable --now docker
-setenforce permissive
-
-# docker run -d --name registry --restart=always -p ${REGISTRY_PORT}:5000 -e STANDALONE=True -e MIRROR_SOURCE=https://registry-1.docker.io -e MIRROR_SOURCE_INDEX=https://index.docker.io -e STORAGE_PATH=/var/lib/registry -v /data/host/registry-storage:/var/lib/registry registry:2
-# docker exec -it registry /bin/sh
-# cat << EOF >> /etc/docker/registry/config.yml
-# proxy:
-#   remoteurl: https://registry-1.docker.io
-# EOF
-# exit
-exit
-
-mkdir ~/openstack-virt-env
-virtualenv ~/openstack-virt-env
-source ~/openstack-virt-env/bin/activate
-pip install -U pip
-pip install ansible
-pip install kolla-ansible
+sudo setenforce permissive
 sudo mkdir -p /etc/kolla
 sudo chown $USER:$USER /etc/kolla
 cp -r ~/openstack-virt-env/share/kolla-ansible/etc_examples/kolla/* /etc/kolla
-# Sample inventory files
-#cp ~/openstack-virt-env/share/kolla-ansible/ansible/inventory/* .
 # Make sure Ansible uses scp.
 cat > ~vagrant/.ansible.cfg <<EOF
 [defaults]
@@ -172,47 +144,128 @@ remote_user = root
 scp_if_ssh=True
 EOF
 chown vagrant: ~vagrant/.ansible.cfg
-# git clone https://opendev.org/openstack/kolla
-# pip install --upgrade docker
-# sudo usermod -aG docker vagrant
-
 mv ~/globals.yml /etc/kolla/
 
-# cd kolla
-# tools/start-registry
+###
+# External CEPH configurations
+# https://docs.openstack.org/kolla-ansible/queens/reference/external-ceph-guide.html
+###
+rm -rvf /etc/kolla/config
+mkdir -p /etc/kolla/config
+cat << EOF > /etc/kolla/config/ceph.conf
+# Please do not change this file directly since it is managed by Ansible and will be overwritten
+[global]
+cluster network = 172.28.128.0/24
+fsid = 6e008d48-1661-11e8-8546-008c3214218a
+mon host = [v2:192.168.121.174:3300,v1:192.168.121.174:6789],[v2:192.168.121.76:3300,v1:192.168.121.76:6789],[v2:192.168.121.201:3300,v1:192.168.121.201:6789]
+mon initial members = storage0,storage1,storage2
+osd pool default crush rule = -1
+osd_pool_default_pg_num = 100
+osd_pool_default_pgp_num = 100
+osd_pool_default_size = 1
+public network = 192.168.121.0/24
+rgw_keystone_accepted_roles = Member, admin
+rgw_keystone_admin_domain = default
+rgw_keystone_admin_password = RtYPg7AUdsZCGv4Z4rF8FvnaR
+rgw_keystone_admin_project = service
+rgw_keystone_admin_user = swift
+rgw_keystone_api_version = 3
+rgw_keystone_implicit_tenants = true
+rgw_keystone_revocation_interval = 0
+rgw_keystone_url = http://control0:5000
+rgw_s3_auth_use_keystone = true
+
+[osd]
+osd memory target = 4294967296
+
+osd_memory_target = 1873113088
+osd_memory_base = 962770944
+osd_memory_cache_min = 1417942016
+EOF
+
+mkdir -p /etc/kolla/config/glance/
+cp /etc/kolla/config/ceph.conf /etc/kolla/config/glance/ceph.conf
+cat << EOF > /etc/kolla/config/glance/glance-api.conf
+[glance_store]
+stores = rbd
+default_store = rbd
+rbd_store_pool = images
+rbd_store_user = glance
+rbd_store_ceph_conf = /etc/ceph/ceph.conf
+EOF
+cat << EOF > /etc/kolla/config/glance/ceph.client.glance.keyring
+[client.glance]
+        key = AQAN0RdbAAAAABAA3CpSKRVDrENjkOSun0000w==
+EOF
+
+# [client.glance]
+#         key = AQAU829dlEpVMhAAnm8Rncg4Rz1yHor66ANpeQ==
+#         caps mon = "profile rbd"
+#         caps osd = "profile rbd pool=images"
+
+mkdir -p /etc/kolla/config/cinder/{cinder-backup,cinder-volume}
+cp /etc/kolla/config/ceph.conf /etc/kolla/config/cinder/ceph.conf
+cat << EOF > /etc/kolla/config/cinder/cinder-volume.conf
+[DEFAULT]
+enabled_backends = rbd-1
+
+[rbd-1]
+rbd_ceph_conf = /etc/ceph/ceph.conf
+rbd_user = cinder
+rbd_pool = volumes
+rbd_secret_uuid = {{ cinder_rbd_secret_uuid }}
+volume_backend_name = rbd-1
+volume_driver = cinder.volume.drivers.rbd.RBDDriver
+backend_host = rbd:volumes
+EOF
+cat << EOF > /etc/kolla/config/cinder/cinder-volume/ceph.client.cinder.keyring
+[client.cinder]
+        key = AQBclHBdZ8G6JRAAHEXhgmU7pQXf34Fxpeib3A==
+EOF
+cat << EOF > /etc/kolla/config/cinder/cinder-backup.conf
+[DEFAULT]
+backup_ceph_conf = /etc/ceph/ceph.conf
+backup_ceph_user = cinder-backup
+backup_ceph_chunk_size = 134217728
+backup_ceph_pool = backups
+backup_driver = cinder.backup.drivers.ceph
+backup_ceph_stripe_unit = 0
+backup_ceph_stripe_count = 0
+restore_discard_excess_bytes = true
+EOF
+cp /etc/kolla/config/cinder/cinder-volume/ceph.client.cinder.keyring /etc/kolla/config/cinder/cinder-backup/ceph.client.cinder.keyring
+cat << EOF > /etc/kolla/config/cinder/cinder-backup/ceph.client.cinder-backup.keyring
+[client.cinder-backup]
+        key = AQCZlHBdOTrfEBAAiC3Tg/RwEW1g0yyWCSbNjA==
+EOF
+
+mkdir -p /etc/kolla/config/nova
+cp /etc/kolla/config/ceph.conf /etc/kolla/config/nova/ceph.conf
+cp /etc/kolla/config/cinder/cinder-volume/ceph.client.cinder.keyring /etc/kolla/config/nova/ceph.client.nova.keyring
+cp /etc/kolla/config/cinder/cinder-volume/ceph.client.cinder.keyring /etc/kolla/config/nova/ceph.client.cinder.keyring
+cat << EOF > /etc/kolla/config/nova/nova-compute.conf
+[libvirt]
+images_rbd_pool = vms
+images_type = rbd
+images_rbd_ceph_conf = /etc/ceph/ceph.conf
+rbd_user = cinder
+EOF
 
 # Then use this to verify if ansible can reach all hosts and verify syntax
 ansible -i multinode all -m ping
 kolla-genpwd
 
-# Edit /etc/kolla/globals.yml
-#
-#     kolla_base_distro: "centos"
-#     kolla_install_type: "source"
-#     openstack_release: "stein"
-#     network_interface: "eth0"
-#     neutron_external_interface: "eth1"
-#     docker_registry: 192.168.1.100:5000
-#
-#
-# # for each machine ...
-# #   export REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io
-# #   add this to /etc/docker/daemon.json
-# #       {
-# #         "insecure-registries" : ["192.168.1.100:5000"]
-# #       }
-# #   systemctl restart docker
-# # done
-#
 # kolla-ansible -i ./multinode bootstrap-servers
 # kolla-ansible -i ./multinode prechecks
 # kolla-ansible -i ./multinode pull
 # kolla-ansible -i ./multinode deploy
 
-kolla-ansible -i ./multinode bootstrap-servers && kolla-ansible -i ./multinode prechecks && kolla-ansible -i ./multinode pull && kolla-ansible -i ./multinode deploy
+kolla-ansible -i ./multinode bootstrap-servers && kolla-ansible -i ./multinode prechecks && kolla-ansible -i ./multinode pull && sleep 10 && kolla-ansible -i ./multinode deploy
 
 pip install python-openstackclient
 kolla-ansible post-deploy
+ssh compute0 sudo docker exec -u root nova_compute ln -s /etc/ceph/ceph.client.nova.keyring ceph.client.cinder.keyring
+ssh compute1 sudo docker exec -u root nova_compute ln -s /etc/ceph/ceph.client.nova.keyring ceph.client.cinder.keyring
 . /etc/kolla/admin-openrc.sh
-
+env | grep OS_PASSWORD && sleep 10 || sleep 60
 bash init-runonce

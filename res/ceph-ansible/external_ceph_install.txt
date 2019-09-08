@@ -1,16 +1,9 @@
-for i in operator control0 control1 control2; do vagrant destroy -f $i 2> /dev/null; done
-for _ in 1 2; do for i in operator control0 control1 control2; do vagrant up --provision $i; done; done
-for i in 0 1 2; do sudo echo && sudo rm -vf /storage/storage-control$i.img; sudo qemu-img create -f qcow2 /storage/storage-control$i.img 5000G; sudo virsh attach-disk server_control$i --source /storage/storage-control$i.img --driver qcow2 --target vdb --cache none --persistent; done
-vagrant ssh operator
+for i in operator control0 control1 compute0 compute1 storage0 storage1 storage2; do vagrant destroy -f $i 2> /dev/null; done
+for _ in 1 2; do for i in operator control0 control1 compute0 compute1 storage0 storage1 storage2; do vagrant up --provision $i; done; done
+for i in 0 1 2; do sudo echo && sudo rm -vf /storage/storage$i-disk.img; sudo qemu-img create -f qcow2 /storage/storage$i-disk.img 5000G; sudo virsh attach-disk server_storage$i --source /storage/storage$i-disk.img --subdriver qcow2 --target vdb --cache none --persistent; done
 
+vagrant ssh operator
 cd ~
-sudo yum install python-devel libffi-devel gcc openssl-devel libselinux-python -y
-sudo yum install git sshpass python-virtualenv libvirt -y
-mkdir ~/openstack-virt-env
-virtualenv ~/openstack-virt-env
-source ~/openstack-virt-env/bin/activate
-pip install -U pip
-pip install ansible
 git clone https://github.com/ceph/ceph-ansible.git
 cd ceph-ansible
 git checkout stable-4.0
@@ -18,13 +11,29 @@ pip install -r requirements.txt
 
 rm -rvf ~/custom-ceph; scp -r server@192.168.138.200:/home/server/res/ceph-ansible ~/custom-ceph && mv ~/custom-ceph/ceph-hosts ~/ceph-ansible/ && mv ~/custom-ceph/all.yml ~/ceph-ansible/group_vars/
 
-for i in 0 1 2; do ssh -i ~/.ssh/openstack control$i "sudo yum install lvm2.x86_64 -y; sudo pvcreate /dev/vdb; sudo vgcreate data-vg1 /dev/vdb; sudo lvcreate --yes -l 50%FREE -n data-lv1 data-vg1"; done &
+# for i in 0 1 2; do ssh -i ~/.ssh/openstack control$i "sudo yum install -y yum-utils device-mapper-persistent-data lvm2; sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo; sudo yum install docker-ce docker-ce-cli containerd.io -y"; done
 mv ~/custom-ceph/ceph-hosts ~/ceph-ansible/
 mv ~/custom-ceph/all.yml ~/ceph-ansible/group_vars/
 mv ~/ceph-ansible/site-docker.yml{.sample,}
+# sed -i 's/container_package_name: docker/container_package_name: docker-ce/' ~/ceph-ansible/roles/ceph-container-engine/vars/RedHat.yml
 
 #find ~/custom-ceph/ -name '*.sample' | xargs -L 1 -I ARGS cp ARGS ~/ceph-ansible/group_vars/
 # docker exec ceph-mon-control0 ceph --cluster ceph -n mon. -k /var/lib/ceph/mon/ceph-control0/keyring mon_status --format json
 
 ansible -i ceph-hosts all -m ping
 ansible-playbook -i ceph-hosts site-docker.yml
+
+ssh storage0
+sudo docker exec -it ceph-mon-storage0 bash
+ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images'
+# ceph auth get-or-create client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd pool=images'
+ceph auth get-or-create client.cinder mds 'allow *' mgr 'allow *' mon 'allow *' osd 'allow *'
+ceph auth get-or-create client.cinder-backup mds 'allow *' mgr 'allow *' mon 'allow *' osd 'allow *'
+ceph auth get-or-create client.nova mds 'allow *' mgr 'allow *' mon 'allow *' osd 'allow *'
+# ceph auth get-or-create client.cinder-backup mon 'profile rbd' osd 'profile rbd pool=backups'
+
+# ceph auth get-or-create client.nova mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=vms, allow rx pool=images'
+
+# for i in 0 1 2; do ssh -i ~/.ssh/openstack control$i "sudo yum remove python-requests python-docker-py -y"; done
+for i in 0 1 2; do ssh storage$i sudo ip a; done | grep 10.4.4
+cd ~

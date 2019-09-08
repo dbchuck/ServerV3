@@ -2,7 +2,7 @@
 # additional groups are for more control of the environment.
 [control]
 # These hostname must be resolvable from your deployment host
-control[0:2] ansible_user=vagrant ansible_ssh_private_key_file=/home/vagrant/.ssh/openstack ansible_become=true
+control[0:1] ansible_user=vagrant ansible_ssh_private_key_file=/home/vagrant/.ssh/openstack ansible_become=true
 
 # The network nodes are where your l3-agent and loadbalancers will run
 # This can be the same as a host in the control group
@@ -20,8 +20,8 @@ control
 # and specify like below:
 #compute01 neutron_external_interface=eth0 api_interface=em1 storage_interface=em1 tunnel_interface=em1
 
-[storage:children]
-control
+[storage]
+# Don't put anything here for "external" Ceph
 
 [deployment]
 localhost       ansible_connection=local become=true
@@ -350,13 +350,13 @@ storage
 cinder
 
 [cinder-backup:children]
-storage
+control
 
 [cinder-scheduler:children]
 cinder
 
 [cinder-volume:children]
-storage
+control
 
 # Cloudkitty
 [cloudkitty-api:children]
